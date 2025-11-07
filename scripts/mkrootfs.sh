@@ -117,13 +117,29 @@ run_debootstrap(){
     mkdir ${ROOTFS}
 
     if [ "${ARCH}" == "arm64" ];then
-        sudo mmdebstrap --architectures=arm64 \
+        sudo mmdebstrap --variant=minbase \
+      	--aptopt='Apt::Install-Recommends "false"' \
+      	--aptopt='Acquire::Languages "none"' \
+      	--aptopt='Apt::Install-Suggests "false"' \
+      	--aptopt='APT::NeverAutoRemove "true"' \
+      	--dpkgopt='path-exclude=/usr/share/man/*' \
+      	--dpkgopt='path-exclude=/usr/share/locale/*' \
+      	--dpkgopt='path-exclude=/usr/share/doc/*' \
+      	--architectures=arm64 \
         --include="${PACKAGES}" \
         ${VERSION} ${ROOTFS} \
         "deb ${MIRROR} ${VERSION} ${LIST}" \
         "deb ${MIRROR} ${VERSION}-updates ${LIST}"
     elif [ "${ARCH}" == "arm" ];then
-        sudo mmdebstrap --architectures=armhf \
+        sudo mmdebstrap --variant=minbase \
+      	--aptopt='Apt::Install-Recommends "false"' \
+      	--aptopt='Acquire::Languages "none"' \
+      	--aptopt='Apt::Install-Suggests "false"' \
+      	--aptopt='APT::NeverAutoRemove "true"' \
+      	--dpkgopt='path-exclude=/usr/share/man/*' \
+      	--dpkgopt='path-exclude=/usr/share/locale/*' \
+      	--dpkgopt='path-exclude=/usr/share/doc/*' \
+      	--architectures=armhf \
         --include="${PACKAGES}" \
         ${VERSION} ${ROOTFS} \
         "deb ${MIRROR} ${VERSION} ${LIST}" \
@@ -185,16 +201,22 @@ sed -i "s|#PermitRootLogin prohibit-password|PermitRootLogin yes|g" ${ROOTFS}/et
 }
 
 clean_rootfs(){
-chroot ${ROOTFS} apt clean
-if [ "$HOST_ARCH" != "$ARCH" ];then
-    if [ ${ARCH} == "arm64" ];then
-        sudo rm ${ROOTFS}/usr/bin/qemu-aarch64-static
-    elif [ ${ARCH} == "arm" ];then
-        sudo rm ${ROOTFS}/usr/bin/qemu-arm-static
+    setup_mount_resolv  # 确保 chroot 可用
+    chroot ${ROOTFS} apt clean
+    # 进一步 purge 残余（生产精简）
+    chroot ${ROOTFS} apt purge -y man-db groff-base aptitude packagekit python3 python3-minimal gnupg2 gpg
+    chroot ${ROOTFS} apt autoremove -y --purge
+    chroot ${ROOTFS} rm -rf /var/cache/apt/archives/* /tmp/* /var/log/*
+    if [ "$HOST_ARCH" != "$ARCH" ];then
+        if [ ${ARCH} == "arm64" ];then
+            sudo rm ${ROOTFS}/usr/bin/qemu-aarch64-static
+        elif [ ${ARCH} == "arm" ];then
+            sudo rm ${ROOTFS}/usr/bin/qemu-arm-static
+        fi
+    else
+        echo "You are running this script on a ${ARCH} machine, progress...."
     fi
-else
-echo "You are running this script on a ${ARCH} mechine, progress...."
-fi
+    UMOUNT_ALL  # 清理挂载
 }
 
 setup_hostname_fstab(){
